@@ -30,8 +30,14 @@ impl<Elem: Copy> Bvh<Elem> {
         }
     }
 
+    /// Depth of the Bvh. _Not_ O(1).
     pub fn depth(&self) -> usize {
         self.root.depth()
+    }
+
+    /// Length of the Bvh. _Not_ O(1).
+    pub fn len(&self) -> usize {
+        self.root.len()
     }
 
     pub fn insert(&mut self, e: Elem, bbox: Bbox) {
@@ -169,6 +175,13 @@ impl<Elem: Copy> BvhNode<Elem> {
             BvhNode::Branch { children, .. } => {
                 children.iter().map(BvhNode::depth).max().unwrap() + 1
             }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            BvhNode::Leaf { elems, .. } => elems.len(),
+            BvhNode::Branch { children, .. } => children.iter().map(BvhNode::len).sum(),
         }
     }
 }
