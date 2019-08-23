@@ -1,7 +1,7 @@
 use crate::geo::{Bbox, Vec2};
 
 const LEAF_SIZE: usize = 128;
-const MIN_BBOX_AREA: f64 = 1e-3;
+const MIN_BBOX_AREA: f64 = 1e0;
 
 #[derive(Debug)]
 pub struct Bvh<Elem> {
