@@ -59,10 +59,6 @@ impl<Elem: Copy> BvhNode<Elem> {
         let pivot = bbox.center();
         let quads = bbox.split(pivot);
 
-        // for q in &quads {
-        //     dbg!((q.dimensions(), q.area()));
-        // }
-
         let mut children = Box::new([
             BvhNode::Leaf {
                 elems: Vec::with_capacity(LEAF_SIZE),

@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::io;
-use std::io::Write;
+use std::collections::{HashMap, HashSet};
 
 use crate::arena::{Arena, ArenaId};
 use crate::bvh::Bvh;
@@ -60,6 +58,20 @@ impl DelaunayMesh {
         dm
     }
 
+    pub fn bbox(&self) -> Bbox {
+        self.input_bbox
+    }
+
+    pub fn vertices(&self) -> impl Iterator<Item = (VertexId, &Vertex)> {
+        self.vertices
+            .enumerate()
+            .filter(move |(_, v)| self.input_bbox.contains(v.position))
+    }
+
+    pub fn vertex(&self, vid: VertexId) -> &Vertex {
+        &self.vertices[vid]
+    }
+
     pub fn triangles(&self) -> impl Iterator<Item = (TriangleId, &Triangle)> {
         // exclude initial super triangles
         self.triangles
@@ -117,24 +129,11 @@ impl DelaunayMesh {
         // inside the circumcircles of both triangles.
         //
 
-        use std::collections::HashSet;
         let enclosing_triangles = self
             .triangles_index
             .enclosing(p, |&tid, p| self.triangles[tid].circumcircle.contains(p))
             .cloned()
             .collect::<HashSet<_>>();
-        // let enclosing_triangles2 = self
-        //     .triangles
-        //     .enumerate()
-        //     .filter_map(|(tid, t)| {
-        //         if t.circumcircle.contains(p) {
-        //             Some(tid)
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .collect::<HashSet<_>>();
-        // assert_eq!(enclosing_triangles, enclosing_triangles2);
 
         let boundary = self.triangles_boundary(&enclosing_triangles);
 
@@ -215,34 +214,21 @@ impl DelaunayMesh {
 }
 
 impl Vertex {
-    pub fn new(position: Vec2) -> Self {
+    fn new(position: Vec2) -> Self {
         Vertex { position }
+    }
+
+    pub fn position(&self) -> Vec2 {
+        self.position
     }
 }
 
-pub fn dump_svg(out: &mut impl Write, dmesh: &DelaunayMesh) -> io::Result<()> {
-    writeln!(
-        out,
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="{x} {y} {w} {h}">
-<rect x="{x}" y="{y}" width="{w}" height="{h}" stroke="none" fill="white" />
-             "#,
-        x = dmesh.input_bbox.min().x,
-        y = dmesh.input_bbox.min().y,
-        w = dmesh.input_bbox.max().x - dmesh.input_bbox.min().x,
-        h = dmesh.input_bbox.max().y - dmesh.input_bbox.min().y,
-    )?;
-
-    for (tri, _) in dmesh.triangles() {
-        let [a, b, c] = dmesh.triangle_vertices(tri);
-
-        writeln!(
-            out,
-            r#"<polygon points="{},{} {},{} {},{}" fill="none" stroke="black" />"#,
-            a.x, a.y, b.x, b.y, c.x, c.y
-        )?;
+impl Triangle {
+    pub fn vertices(&self) -> [VertexId; 3] {
+        self.vertices
     }
 
-    writeln!(out, "</svg>")
+    pub fn circumcircle(&self) -> Circle {
+        self.circumcircle
+    }
 }
