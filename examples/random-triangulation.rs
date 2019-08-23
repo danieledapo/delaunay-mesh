@@ -16,35 +16,35 @@ pub fn main() -> io::Result<()> {
         .unwrap_or(50);
 
     let mut bbox = Bbox::new(Vec2::zero());
-    bbox.expand(Vec2::new(800.0, 800.0));
+    bbox.expand(Vec2::new(f64::from(npoints), f64::from(npoints)));
 
     let mut rng = thread_rng();
     let mut mesh = DelaunayMesh::new(bbox);
 
     for i in 0..npoints {
         if (i + 1) % (npoints / 100).max(1) == 0 {
-            print!("\rprogress: {}%", i * 100 / npoints);
+            let perc = i * 100 / npoints;
+            print!("\rprogress: {}%", perc);
             io::stdout().flush()?;
         }
 
-        // don't spam too much
-        if npoints <= 100 {
-            let mut out = BufWriter::new(File::create(format!("triangulation-{}.svg", i))?);
-            dump_svg(&mut out, &mesh)?;
-        }
+        let x: f64 = rng
+            .gen_range(bbox.min().y as u32, bbox.max().x as u32)
+            .into();
+        let y: f64 = rng
+            .gen_range(bbox.min().y as u32, bbox.max().y as u32)
+            .into();
 
-        let x = rng.gen_range(bbox.min().x, bbox.max().x);
-        let y = rng.gen_range(bbox.min().y, bbox.max().y);
+        assert!(x.is_finite());
+        assert!(y.is_finite());
 
         mesh.insert(Vec2::new(x, y));
     }
-    println!("\rprogress: 100%");
 
-    // don't create huge files
-    if npoints <= 1_000 {
-        let mut out = BufWriter::new(File::create("triangulation.svg")?);
-        dump_svg(&mut out, &mesh)?;
-    }
+    println!("\rprogress: 100% vertices: {}", mesh.vertices().count());
+
+    let mut out = BufWriter::new(File::create("triangulation.svg")?);
+    dump_svg(&mut out, &mesh)?;
 
     Ok(())
 }
