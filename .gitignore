@@ -1,3 +1,4 @@
 /target
 **/*.rs.bk
 triangulation*.svg
+recursive-triangulation*.svg
