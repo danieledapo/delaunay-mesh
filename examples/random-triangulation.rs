@@ -29,7 +29,7 @@ pub fn main() -> io::Result<()> {
         }
 
         let x: f64 = rng
-            .gen_range(bbox.min().y as u32, bbox.max().x as u32)
+            .gen_range(bbox.min().x as u32, bbox.max().x as u32)
             .into();
         let y: f64 = rng
             .gen_range(bbox.min().y as u32, bbox.max().y as u32)
