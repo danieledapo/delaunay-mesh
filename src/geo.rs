@@ -137,8 +137,14 @@ impl Bbox {
     }
 }
 
+pub fn collinear(a: Vec2, b: Vec2, c: Vec2) -> bool {
+    let area = a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y);
+    area == 0.0
+}
+
 impl Circle {
     pub fn new(center: Vec2, radius: f64) -> Self {
+        debug_assert!(radius >= 0.0);
         Circle { center, radius }
     }
 
@@ -155,7 +161,7 @@ impl Circle {
     }
 
     pub fn contains(&self, p: Vec2) -> bool {
-        self.center.dist(p) - self.radius <= 1e-6
+        self.center.dist(p) - self.radius <= 1e-4
     }
 
     pub fn bbox(&self) -> Bbox {
@@ -273,8 +279,14 @@ impl Div<f64> for Vec2 {
 mod tests {
     use super::*;
 
+    use proptest::prelude::*;
+
+    fn rand_vec2() -> impl Strategy<Value = Vec2> {
+        (any::<u32>(), any::<u32>()).prop_map(|(a, b)| Vec2::new(a.into(), b.into()))
+    }
+
     #[test]
-    fn test_circumcircle() {
+    fn test_triangle_circumcircle() {
         assert_eq!(
             Circle::circumcircle(Vec2::zero(), Vec2::new(3.0, 4.0), Vec2::new(0.0, 4.0)),
             Circle::new(Vec2::new(1.5, 2.0), 2.5)
@@ -290,4 +302,113 @@ mod tests {
         );
     }
 
+    proptest! {
+        #[test]
+        fn prop_circle_always_contains_known_points(c in rand_vec2(), r in any::<u32>()) {
+            let r = r.into();
+            let circle = Circle::new(c, r);
+            let circle_bbox = circle.bbox();
+
+            let known_points = [
+                c,
+                c + Vec2::new(0.0, 1.0) * r,
+                c + Vec2::new(0.0, -1.0) * r,
+                c + Vec2::new(1.0, 0.0) * r,
+                c + Vec2::new(-1.0, 0.0) * r,
+            ];
+            for p in known_points.iter() {
+                prop_assert!(circle.contains(*p));
+                prop_assert!(circle_bbox.contains(*p));
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn prop_bbox_split_center(a in rand_vec2(), b in rand_vec2()) {
+            let mut bbox = Bbox::new(a);
+            bbox.expand(b);
+
+            let center = bbox.center();
+            prop_assert!(bbox.contains(center));
+
+            let children = bbox.split(center);
+            for child in children.iter() {
+                prop_assert_eq!(bbox.intersection(*child), Some(*child));
+
+                prop_assert!(bbox.contains(child.min()));
+                prop_assert!(bbox.contains(child.max()));
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn prop_triangle_vertices_valid_bary(
+            a in rand_vec2(),
+            b in rand_vec2(),
+            c in rand_vec2(),
+        ) {
+            prop_assume!(!collinear(a, b, c));
+
+            let manifest = [
+                (a, (1.0, 0.0, 0.0)),
+                (b, (0.0, 1.0, 0.0)),
+                (c, (0.0, 0.0, 1.0)),
+            ];
+            for (v, exp_bary) in manifest.iter() {
+                let bary = BarycentricCoords::triangle([a, b, c], *v).unwrap();
+
+                prop_assert_eq!(
+                    bary,
+                    BarycentricCoords {
+                        w0: exp_bary.0,
+                        w1: exp_bary.1,
+                        w2: exp_bary.2
+                    }
+                );
+
+                prop_assert_eq!(bary.to_point([a, b, c]), *v);
+            }
+
+            let centroid = (a + b + c) / 3.0;
+            let mid_bary = BarycentricCoords::triangle([a, b, c], centroid).unwrap();
+
+            prop_assert!(
+                mid_bary.to_point([a, b, c]).dist2(centroid) < 1e-4,
+                "centoid {:?} bary {:?}",
+                centroid,
+                mid_bary
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn prop_triangle_circumcircle_contains_vertices(
+            a in rand_vec2(),
+            b in rand_vec2(),
+            c in rand_vec2(),
+        ) {
+            prop_assume!(!collinear(a, b, c));
+
+            let circle = Circle::circumcircle(a, b, c);
+
+            let known_points = [
+                a,
+                b,
+                c,
+                (a + b + c) / 3.0,
+            ];
+            for v in known_points.iter() {
+                prop_assert!(
+                    circle.contains(*v),
+                    "circle {:?} p: {:?} dist: {:?}",
+                    circle,
+                    v,
+                    (circle.center - *v).norm() - circle.radius
+                );
+            }
+        }
+    }
 }
