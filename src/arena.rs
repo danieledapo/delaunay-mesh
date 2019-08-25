@@ -147,3 +147,45 @@ impl<T> Hash for ArenaId<T> {
         self.ix.hash(state);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic() {
+        let mut arena: Arena<u32> = Arena::new();
+        assert!(arena.get(ArenaId::new(0)).is_none());
+
+        let id42 = arena.push(42);
+        assert_eq!(arena[id42], 42);
+
+        let id73 = arena.push(73);
+        arena.remove(id42);
+        assert!(arena.get(id42).is_none());
+        assert_eq!(arena[id73], 73);
+
+        let id0 = arena.push(0);
+        assert_eq!(arena[id73], 73);
+        assert_eq!(arena[id0], 0);
+
+        arena[id0] = 69;
+        assert_eq!(arena[id73], 73);
+        assert_eq!(arena[id0], 69);
+    }
+
+    #[test]
+    fn test_iterators() {
+        let mut arena = Arena::new();
+        arena.push(42);
+        arena.push(73);
+        arena.push(0);
+
+        assert_eq!(arena.iter().collect::<Vec<_>>(), vec![&42, &73, &0]);
+
+        for (i, e) in arena.enumerate() {
+            assert_eq!(&arena[i], e);
+        }
+    }
+
+}
