@@ -35,7 +35,7 @@ impl<Elem: Copy> Bvh<Elem> {
         self.root.depth()
     }
 
-    /// Length of the Bvh. _Not_ O(1).
+    /// Length of the Bvh (potentially greater than the number of distinct elements). _Not_ O(1).
     pub fn len(&self) -> usize {
         self.root.len()
     }
@@ -51,6 +51,8 @@ impl<Elem: Copy> Bvh<Elem> {
         self.root.remove(e, bbox)
     }
 
+    /// Return all the elements that contain the given refpoint. Might return the same elemnt
+    /// multiple times.
     pub fn enclosing(
         &self,
         refpoint: Vec2,
@@ -161,7 +163,7 @@ impl<Elem: Copy> BvhNode<Elem> {
         })
     }
 
-    pub fn intersects(&self, e_bbox: Bbox) -> bool {
+    fn intersects(&self, e_bbox: Bbox) -> bool {
         let bbox = match self {
             BvhNode::Branch { bbox, .. } | BvhNode::Leaf { bbox, .. } => bbox,
         };
@@ -183,5 +185,104 @@ impl<Elem: Copy> BvhNode<Elem> {
             BvhNode::Leaf { elems, .. } => elems.len(),
             BvhNode::Branch { children, .. } => children.iter().map(BvhNode::len).sum(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    #[test]
+    fn test_basic() {
+        let mut bbox = Bbox::new(Vec2::zero());
+        bbox.enlarge(LEAF_SIZE as f64 * 20.0);
+
+        let mut bvh = Bvh::new(bbox);
+
+        for y in 0..LEAF_SIZE {
+            for x in 0..LEAF_SIZE {
+                let ip = (x, y);
+
+                let x = x as f64 * 20.0;
+                let y = y as f64 * 20.0;
+
+                let mut b = Bbox::new(Vec2::new(x, y));
+                b.enlarge(10.0);
+
+                bvh.insert(ip, b);
+
+                assert!(bvh
+                    .enclosing(b.center(), |(x, y), p| {
+                        let mut b = Bbox::new(Vec2::new(*x as f64, *y as f64));
+                        b.enlarge(10.0);
+                        b.contains(p)
+                    })
+                    .all(|ipp| *ipp == ip));
+            }
+        }
+
+        let mut b = Bbox::new(Vec2::zero());
+        b.enlarge(10.0);
+        bvh.remove(&(0, 0), b);
+        assert!(!bvh
+            .enclosing(b.center(), |(x, y), p| {
+                let mut b = Bbox::new(Vec2::new(*x as f64, *y as f64));
+                b.enlarge(10.0);
+                b.contains(p)
+            })
+            .any(|ipp| *ipp == (0, 0)));
+    }
+
+    proptest! {
+        #[test]
+        fn prop_enclosing_gives_same_result_as_bruteforce(
+            pts in prop::collection::vec((0_u32..30_000, 0_u32..30_000), 1..200),
+            to_search in prop::collection::vec((0_u32..30_000, 0_u32..30_000), 1..200),
+        ) {
+            use std::collections::HashSet;
+
+            let mut bbox = Bbox::new(Vec2::new(f64::from(pts[0].0), f64::from(pts[0].1)));
+            for &(x, y) in &pts[1..] {
+                bbox.expand(Vec2::new(x.into(), y.into()));
+            }
+
+            let mut bvh = Bvh::new(bbox);
+            for &(x, y) in &pts {
+                let mut bbox = Bbox::new(Vec2::new(x.into(), y.into()));
+                bbox.enlarge(5.0);
+
+                bvh.insert((x, y), bbox);
+            }
+
+            let to_search = pts.iter().chain(to_search.iter());
+            for &(x, y) in to_search {
+                let pf = Vec2::new(x.into(), y.into());
+
+                let mut b = Bbox::new(pf);
+                b.enlarge(5.0);
+
+                let enclosing = bvh
+                    .enclosing(Vec2::new(x.into(), y.into()), |&(x, y), p| {
+                        let mut b = Bbox::new(Vec2::new(x.into(), y.into()));
+                        b.enlarge(5.0);
+                        b.contains(p)
+                    })
+                    .collect::<HashSet<_>>();
+
+                let brute_force_enclosing = pts
+                    .iter()
+                    .filter(|&&(x, y)| {
+                        let mut b = Bbox::new(Vec2::new(x.into(), y.into()));
+                        b.enlarge(5.0);
+                        b.contains(pf)
+                    })
+                    .collect::<HashSet<_>>();
+
+                prop_assert_eq!(enclosing, brute_force_enclosing);
+            }
+        }
+
     }
 }
